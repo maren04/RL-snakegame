@@ -9,6 +9,11 @@ from helper import plot
 MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
 LR = 0.001
+# map size (grid cells: width//BLOCK_SIZE, height//BLOCK_SIZE)
+mx = 33
+my = 25
+# input size: 3 maps (snake, head, food) flattened + 4 direction flags
+isz = 3 * mx * my + 4 + 7
 
 class Agent:
 
@@ -17,7 +22,7 @@ class Agent:
         self.epsilon = 0 # randomness
         self.gamma = 0.9 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
-        self.model = Linear_QNet(11, 256, 3)
+        self.model = Linear_QNet(isz, 512, 3) # Original 11, 256, 3
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
 
@@ -27,13 +32,38 @@ class Agent:
         point_r = Point(head.x + 20, head.y)
         point_u = Point(head.x, head.y - 20)
         point_d = Point(head.x, head.y + 20)
+
+        snake_map = np.zeros((mx,my))
+        food_map = np.zeros((mx,my))
+        head_map = np.zeros((mx,my))
+        for pt in game.snake:
+            x = int(pt.x//20)
+            y = int(pt.y//20)
+            assert pt.x%20 == 0, f"ERR: pt.x is: {pt.x}"
+            assert pt.y%20 == 0, f"ERR: pt.y is: {pt.y}"
+            snake_map[x][y] = 1
+        assert head.x%20 == 0, f"ERR: head.x is: {head.x}"
+        assert head.y%20 == 0, f"ERR: head.y is: {head.y}"
+        x = int(head.x//20)
+        y = int(head.y//20)
+        head_map[x][y] = 1
+        x = int(game.food.x//20)
+        y = int(game.food.y//20)
+        assert game.food.x%20 == 0, f"ERR: head.x is: {game.food.x}"
+        assert game.food.y%20 == 0, f"ERR: head.y is: {game.food.y}"
+        food_map[x][y] = 1
+
+        # stack maps channel-first and flatten
+        stacked = np.stack([snake_map, head_map, food_map], axis=0)  # (C, H, W)
+        flat_maps = stacked.reshape(-1)  # length 2304
         
         dir_l = game.direction == Direction.LEFT
         dir_r = game.direction == Direction.RIGHT
         dir_u = game.direction == Direction.UP
         dir_d = game.direction == Direction.DOWN
 
-        state = [
+
+        state1 = [
             # Danger straight
             (dir_r and game.is_collision(point_r)) or 
             (dir_l and game.is_collision(point_l)) or 
@@ -52,18 +82,25 @@ class Agent:
             (dir_r and game.is_collision(point_u)) or 
             (dir_l and game.is_collision(point_d)),
             
-            # Move direction
-            dir_l,
-            dir_r,
-            dir_u,
-            dir_d,
-            
+            # # Move direction
+            # dir_l,
+            # dir_r,
+            # dir_u,
+            # dir_d,
+
+            # # Three coordinate maps for the whole stationary game state
+            # snake_map,
+            # head_map,
+            # food_map
+
+
             # Food location 
             game.food.x < game.head.x,  # food left
             game.food.x > game.head.x,  # food right
             game.food.y < game.head.y,  # food up
             game.food.y > game.head.y  # food down
             ]
+        state = np.concatenate([flat_maps, np.array([dir_l, dir_r, dir_u, dir_d], dtype=np.float32), state1])
 
         return np.array(state, dtype=int)
 

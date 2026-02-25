@@ -24,7 +24,7 @@ BLUE2 = (0, 100, 255)
 BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
-SPEED = 40
+SPEED = 400 # Original is 40
 
 class SnakeGameAI:
 
@@ -69,6 +69,9 @@ class SnakeGameAI:
                 pygame.quit()
                 quit()
         
+        # Save the old position to calculate reward
+        old_head_pos = self.head
+
         # 2. move
         self._move(action) # update the head
         self.snake.insert(0, self.head)
@@ -87,6 +90,10 @@ class SnakeGameAI:
             reward = 10
             self._place_food()
         else:
+            # calculate the reward based on if the player got closer to the food
+            old_dist = (old_head_pos.x-self.food.x)**2+(old_head_pos.y-self.food.y)**2
+            new_dist = (self.head.x-self.food.x)**2+(self.head.y-self.food.y)**2
+            # reward = old_dist>new_dist
             self.snake.pop()
         
         # 5. update ui and clock
